@@ -1,0 +1,87 @@
+
+
+
+library(ggplot2)
+library(markovchain)
+library(reshape2)
+
+cg <- read.csv("C:/Users/Fred Rossoff/Desktop/cg.csv")
+cg=mutate(cg, congrowth=c(NA, exp(diff(log(RPCC)))-1))
+cg = cg %>% na.omit()
+acf=acf(cg[,5], lag.max=1, demean=TRUE)
+mu = mean(cg[,5])
+delta = sd(cg[,5])
+ac=acf$acf[2]
+phi = (ac+1)/2
+lambdaone=(1+conmu+condelta)
+lambdatwo=(1+conmu-condelta)
+
+
+doit=function(a,b,p,m,d){
+  lambdaone=(1+m+d)
+  lambdatwo=(1+m-d)
+  transition <- new("markovchain", states = c("good", "bad"),
+                    transitionMatrix = matrix(data = c(p, (1-p), (1-p), p), 
+                                              nrow = 2),
+                    name = "transition")
+  
+  steady=steadyStates(transition)
+  steadygood=steady[1]
+  steadybad=steady[2]
+  d=(p*((lambdaone)^(1-a)))
+  e=((1-p)*((lambdatwo)^(1-a)))
+  f=((1-p)*((lambdaone)^(1-a)))
+  g=((p)*((lambdatwo)^(1-a)))
+  X=array(c((1/b)-d, -f , -e,  (1/b)-g), dim=c(2,2))
+  Y= c((d+e), (f+g))
+  Z=solve(X,Y)
+  w1=Z[1]
+  w2=Z[2]
+  r11 = (lambdaone*(w1+1))/w1 - 1
+  r12 =(lambdatwo*(w2+1))/w1 - 1
+  r21 = (lambdaone*(w1+1))/w2 - 1
+  r22 = (lambdatwo*(w2+1))/w2 - 1
+  riskreturn1=(p*r11)+((1-p)*r12)
+  riskreturn2=((1-p)*r21)+(p*r22)
+  riskreturn=(steadygood*riskreturn1+steadybad*riskreturn2)
+  risklessprice1=b*(p*(lambdaone^(-a))+(1-p)*(lambdatwo^(-a)))
+  risklessprice2=b*(p*(lambdatwo^(-a))+(1-p)*(lambdaone^(-a)))
+  riskless1=1/(risklessprice1)-1
+  riskless2=1/(risklessprice2)-1
+  riskless=steadygood*riskless1 + steadybad*riskless2
+  premium=riskreturn-riskless
+  output=c(riskless,riskreturn)
+}
+
+b=.9
+phirange = seq(from=.001, to=.97, by=.0002)
+phirange=phirange[phirange!=.5]
+
+draw=function(n){
+  
+  A1=numeric(n)
+  A2=numeric(n)
+  A3=numeric(n)
+  
+  for(i in seq_len(n)){
+    phi=sample(phirange, 1, replace = FALSE)
+    results1=mp(4,b,phi,mu,delta)
+    results2=mp(10,b,phi,mu,delta)
+    A1[i]=phi
+    A2[i]=results1[3]
+    A3[i]=results2[3]
+  }
+  matrix=list(phi=A1,"4"=A2,"10"=A3)
+  return(invisible(matrix))
+}
+
+z=draw(5000)
+z1=as.data.frame(z)
+z2=melt(z1,id.var=1)
+
+
+ggplot(data=z2,aes(x=phi,y=value, colour=variable))+
+  geom_point(alpha=0.2)+
+  scale_colour_manual(name="Alpha Value", values=c("red","blue"))+
+  labs(x="Phi",y="Equity Premium")+
+  ggtitle("Equity Premium by Transition Probability \n (b=.9, mu=XXX, delta=XXX)")
